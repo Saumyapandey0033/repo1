@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head> 
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GenAI-Powered Resume Analyzer</title>
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- pdf.js for reading PDF files in the browser -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.min.js"></script>
+    <style>
+        /* Custom styles for a polished look */
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        .card {
+            background-color: white;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            padding: 1.5rem;
+            transition: all 0.3s ease-in-out;
+        }
+        .tag {
+            display: inline-block;
+            background-color: #eef2ff;
+            color: #4338ca;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            margin: 0.25rem;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8 max-w-4xl">
+        <!-- Header -->
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-900">GenAI-Powered Solutions</h1>
+            <p class="text-lg text-indigo-600 font-semibold">Hack The Matrix: Resume Analyzer</p>
+        </header>
+
+        <!-- Main Application Card -->
+        <div class="card mb-8">
+            <h2 class="text-xl font-semibold mb-4 border-b pb-2">Upload Your Resume</h2>
+            <form id="resume-form" class="space-y-4">
+                <!-- Only Resume File Input and Optional Job Title -->
+                <!-- Resume File Input -->
+                <div>
+                    <label for="resume-file" class="block text-sm font-medium text-gray-700 mb-1">Resume (PDF only)</label>
+                    <input type="file" id="resume-file" name="resume-file" class="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100" accept=".pdf" required>
+                </div>
+                <!-- Optional Job Title Input -->
+                <div>
+                    <label for="job-title" class="block text-sm font-medium text-gray-700 mb-1">Target Job Title (Optional)</label>
+                    <input type="text" id="job-title" name="job-title" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500" placeholder="e.g., Senior Software Engineer">
+                </div>
+                <!-- Submit Button -->
+                <button type="submit" class="w-full bg-indigo-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out">
+                    Analyze Resume
+                </button>
+            </form>
+        </div>
+
+        <!-- Loading and Error Display -->
+        <div id="loading" class="text-center my-4 hidden">
+            <div class="loader inline-block"></div>
+            <p class="text-gray-600 mt-2">Analyzing... This may take a moment.</p>
+        </div>
+        <div id="error" class="text-center my-4 p-4 bg-red-100 text-red-700 rounded-md hidden"></div>
+
+        <!-- Results Section -->
+        <div id="results" class="space-y-8 hidden">
+            <!-- Overall Rating -->
+            <div class="card flex items-center justify-between">
+                <h2 class="text-xl font-semibold">Overall Rating</h2>
+                <div id="rating" class="text-4xl font-bold text-indigo-600 bg-indigo-100 rounded-full w-20 h-20 flex items-center justify-center"></div>
+            </div>
+            
+            <!-- Professional Summary -->
+            <div class="card">
+                <h2 class="text-xl font-semibold mb-3">Generated Professional Summary</h2>
+                <p id="professional-summary" class="text-gray-600 italic"></p>
+            </div>
+            
+            <!-- Highlights -->
+            <div class="card">
+                <h2 class="text-xl font-semibold mb-3">Extracted Highlights</h2>
+                <div id="highlights">
+                    <h3 class="font-semibold mt-4 mb-2">Skills:</h3>
+                    <div id="skills-tags" class="flex flex-wrap"></div>
+                    <h3 class="font-semibold mt-4 mb-2">Projects:</h3>
+                    <div id="projects-tags" class="flex flex-wrap"></div>
+                    <h3 class="font-semibold mt-4 mb-2">Keywords:</h3>
+                    <div id="keywords-tags" class="flex flex-wrap"></div>
+                </div>
+            </div>
+
+            <!-- Suggestions -->
+            <div class="card">
+                <h2 class="text-xl font-semibold mb-3">Suggestions for Improvement</h2>
+                <ul id="suggestions" class="list-disc list-inside space-y-2 text-gray-700"></ul>
+            </div>
+            
+            <!-- Skill Gap Analysis -->
+            <div id="skill-gap-card" class="card hidden">
+                <h2 class="text-xl font-semibold mb-3">Skill Gap Analysis</h2>
+                <p class="text-sm text-gray-500 mb-3">Based on the target job title: <span id="target-job-title" class="font-medium"></span></p>
+                <ul id="missing-skills" class="list-disc list-inside space-y-2 text-gray-700"></ul>
+                 <p id="no-missing-skills" class="text-gray-600 hidden">No significant skill gaps found. The resume is well-aligned with the job title.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Set the workerSrc for pdf.js
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.11.338/pdf.worker.min.js`;
+
+        // DOM Elements
+        const form = document.getElementById('resume-form');
+        const loadingDiv = document.getElementById('loading');
+        const errorDiv = document.getElementById('error');
+        const resultsDiv = document.getElementById('results');
+
+        // --- PROMPT TEMPLATES ---
+        const analysisPromptTemplate = `
+            As an expert resume analyst and professional career coach, meticulously review the provided resume text. Your analysis must be structured in a valid JSON format. Do not include any text before or after the JSON object.
+
+            The JSON object must contain the following keys:
+            1. "highlights": An object containing three arrays of strings:
+               - "skills": A list of all key technical and soft skills.
+               - "projects": A list of project titles or significant accomplishments mentioned.
+               - "keywords": A list of important keywords and technologies.
+            2. "rating": A single integer score from 1 to 10, representing the resume's overall clarity, impact, and formatting based on the text.
+            3. "suggestions": A list of 3-5 concise, actionable bullet points (as strings) for improving the resume.
+            4. "professional_summary": A generated 2-line professional summary (as a single string) tailored to the resume content.
+
+            Here is the resume text to analyze:
+            \`\`\`
+            {resume_text}
+            \`\`\`
+        `;
+
+        const skillGapPromptTemplate = `
+            As a technical recruiter, compare the skills and experience in the provided resume text against the requirements for the target job title '{job_title}'.
+
+            Identify the key skills, technologies, or qualifications required for the job that are missing from the resume.
+
+            Provide the output as a valid JSON object with a single key "missing_skills", which should be a list of strings. If no significant gaps are found, return an empty list. Do not include any text before or after the JSON object.
+
+            Resume Text:
+            \`\`\`
+            {resume_text}
+            \`\`\`
+        `;
+        
+        // --- FORM SUBMISSION HANDLER ---
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            // UI state management
+            resultsDiv.classList.add('hidden');
+            errorDiv.classList.add('hidden');
+            loadingDiv.classList.remove('hidden');
+
+            // Get form data
+            const resumeFile = document.getElementById('resume-file').files[0];
+            const jobTitle = document.getElementById('job-title').value;
+
+            if (!resumeFile) {
+                showError("Please upload a resume file.");
+                return;
+            }
+
+            try {
+                // 1. Extract text from PDF
+                const resumeText = await extractTextFromPdf(resumeFile);
+                if (!resumeText) {
+                    showError("Could not extract text from the PDF. The file might be corrupted or empty.");
+                    return;
+                }
+
+                // 2. Call Gemini API for main analysis
+                const analysisPrompt = analysisPromptTemplate.replace('{resume_text}', resumeText);
+                const analysisResultText = await callGeminiAPI(analysisPrompt);
+                const analysisData = JSON.parse(analysisResultText);
+
+                // 3. Optional: Call for skill gap analysis
+                let skillGapData = null;
+                if (jobTitle && jobTitle.trim() !== "") {
+                    const gapPrompt = skillGapPromptTemplate.replace('{resume_text}', resumeText).replace('{job_title}', jobTitle);
+                    const skillGapResultText = await callGeminiAPI(gapPrompt);
+                    skillGapData = JSON.parse(skillGapResultText);
+                }
+
+                // 4. Display results
+                displayResults(analysisData, skillGapData, jobTitle);
+
+            } catch (err) {
+                console.error("Analysis failed:", err);
+                showError(`An error occurred: ${err.message}. Check the console for more details.`);
+            } finally {
+                loadingDiv.classList.add('hidden');
+            }
+        });
+        
+        // --- HELPER FUNCTIONS ---
+
+        /**
+         * Extracts text content from a PDF file.
+         * @param {File} file - The PDF file object.
+         * @returns {Promise<string>} - A promise that resolves with the extracted text.
+         */
+        async function extractTextFromPdf(file) {
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument(arrayBuffer).promise;
+            let fullText = '';
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const textContent = await page.getTextContent();
+                const pageText = textContent.items.map(item => item.str).join(' ');
+                fullText += pageText + '\n';
+            }
+            return fullText;
+        }
+
+        /**
+         * Calls the Gemini API with a given prompt.
+         * @param {string} prompt - The prompt to send to the model.
+         * @returns {Promise<string>} - A promise that resolves with the model's text response.
+         */
+        async function callGeminiAPI(prompt) {
+            // Hardcoded Gemini API key
+            const apiKey = 'AIzaSyBORIyXC9NmC_jLaRS7bOiXVsDxflI3Yic';
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+
+            const payload = {
+                contents: [{
+                    parts: [{ text: prompt }]
+                }]
+            };
+
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!response.ok) {
+                const errorBody = await response.json();
+                throw new Error(`API Error: ${response.status} ${response.statusText} - ${errorBody.error?.message || 'Unknown error'}`);
+            }
+
+            const result = await response.json();
+            // Extract text, handling potential variations in response structure
+            const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text) {
+                // Clean the response to ensure it's valid JSON
+                // Gemini sometimes wraps its JSON in ```json ... ```
+                if (text.trim().startsWith("```json")) {
+                    return text.trim().slice(7, -3);
+                }
+                return text;
+            } else {
+                throw new Error("Could not extract text from the API response.");
+            }
+        }
+        
+        /**
+         * Renders the analysis results on the page.
+         * @param {object} analysisData - The main analysis data.
+         * @param {object|null} skillGapData - The skill gap analysis data.
+         * @param {string} jobTitle - The target job title.
+         */
+        function displayResults(analysisData, skillGapData, jobTitle) {
+            // Rating
+            document.getElementById('rating').textContent = analysisData.rating || 'N/A';
+            
+            // Professional Summary
+            document.getElementById('professional-summary').textContent = analysisData.professional_summary || 'Not generated.';
+
+            // Highlights
+            const createTags = (data) => data && data.length > 0 ? data.map(item => `<span class="tag">${item}</span>`).join('') : '<span class="text-gray-500">None extracted.</span>';
+            document.getElementById('skills-tags').innerHTML = createTags(analysisData.highlights?.skills);
+            document.getElementById('projects-tags').innerHTML = createTags(analysisData.highlights?.projects);
+            document.getElementById('keywords-tags').innerHTML = createTags(analysisData.highlights?.keywords);
+            
+            // Suggestions
+            const suggestionsList = document.getElementById('suggestions');
+            suggestionsList.innerHTML = '';
+            if (analysisData.suggestions && analysisData.suggestions.length > 0) {
+                analysisData.suggestions.forEach(item => {
+                    const li = document.createElement('li');
+                    li.textContent = item;
+                    suggestionsList.appendChild(li);
+                });
+            } else {
+                suggestionsList.innerHTML = '<li class="text-gray-500">No specific suggestions provided.</li>';
+            }
+
+            // Skill Gap
+            const skillGapCard = document.getElementById('skill-gap-card');
+            const missingSkillsList = document.getElementById('missing-skills');
+            const noMissingSkills = document.getElementById('no-missing-skills');
+            
+            if (skillGapData) {
+                document.getElementById('target-job-title').textContent = jobTitle;
+                missingSkillsList.innerHTML = '';
+                
+                if (skillGapData.missing_skills && skillGapData.missing_skills.length > 0) {
+                    skillGapData.missing_skills.forEach(item => {
+                        const li = document.createElement('li');
+                        li.textContent = item;
+                        missingSkillsList.appendChild(li);
+                    });
+                    noMissingSkills.classList.add('hidden');
+                } else {
+                    noMissingSkills.classList.remove('hidden');
+                }
+                skillGapCard.classList.remove('hidden');
+            } else {
+                skillGapCard.classList.add('hidden');
+            }
+
+            resultsDiv.classList.remove('hidden');
+        }
+
+        /**
+         * Displays an error message to the user.
+         * @param {string} message - The error message to display.
+         */
+        function showError(message) {
+            errorDiv.textContent = message;
+            errorDiv.classList.remove('hidden');
+            loadingDiv.classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
